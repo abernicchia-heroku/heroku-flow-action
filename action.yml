@@ -1,17 +1,20 @@
-name: "Heroku Review Apps Action"
-description: Use Heroku Review Apps API to create review apps
+name: "Heroku Flow Action"
+description: Use Heroku to upload source code, build and either deploy apps or create review apps
 author: Andrea Bernicchia
 inputs:
   heroku-api-key:
     description: "Your Heroku API key"
     required: true
-  heroku-pipeline-id:
-    description: "The Heroku pipeline ID to create Review Apps"
-    required: true
   remove-git-folder:
     description: "When true the .git/ folder is removed before creating the tar"
     required: false
     default: true
+  heroku-app-name:
+    description: "Your Heroku App name when code is pushed"
+    required: true
+  heroku-pipeline-id:
+    description: "The Heroku pipeline ID to create Review Apps"
+    required: true
   review-app-creation-check-timeout:
     description: "Review App creation check timeout. Polling for the Review App creation up to timeout (in seconds)"
     required: false
@@ -28,13 +31,31 @@ branding:
 runs:
   using: "composite"
   steps:
-    - name: Validate inputs
+    # GitHub Actions does not enforce required inputs https://github.com/actions/runner/issues/1070
+    - name: Validate common inputs
+      if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
       shell: bash
       run: |
-        echo "Validating inputs ..."
+        echo "Validating common inputs ..."
         [[ "${{ inputs.heroku-api-key }}" ]] || { echo "heroku-api-key is required"; exit 1; }
-        [[ "${{ inputs.heroku-pipeline-id }}" ]] || { echo "heroku-pipeline-id is required"; exit 1; }
         [[ "${{ inputs.remove-git-folder }}" != "true" && "${{ inputs.remove-git-folder }}" != "false" ]] && { echo "invalid value for remove-git-folder input. Expected 'true' or 'false'"; exit 1; }
+        echo "All inputs are valid"
+
+    - name: Validate push inputs
+      if: ${{ github.event_name == 'push' }}
+      shell: bash
+      run: |
+        echo "Validating push inputs ..."
+        [[ "${{ inputs.heroku-app-name }}" ]] || { echo "heroku-app-name is required"; exit 1; }
+        echo "All inputs are valid"
+
+    # When a PR is closed only the heroku-pipeline-id is required, but both review-app-creation-check-timeout and review-app-creation-check-sleep-time have default values then it won't harm even if not used
+    - name: Validate pull_request inputs
+      if: ${{ github.event_name == 'pull_request' }}
+      shell: bash
+      run: |
+        echo "Validating pull_request inputs ..."
+        [[ "${{ inputs.heroku-pipeline-id }}" ]] || { echo "heroku-pipeline-id is required"; exit 1; }
         [[ "${{ inputs.review-app-creation-check-timeout }}" =~ ^[0-9]+$ ]] || { echo "review-app-creation-check-timeout must be a number"; exit 1; }
         [[ "${{ inputs.review-app-creation-check-sleep-time }}" =~ ^[0-9]+$ && "${{ inputs.review-app-creation-check-sleep-time }}" -ge 5 ]] || { echo "review-app-creation-check-sleep-time must be a number >= 5"; exit 1; }
         echo "All inputs are valid"
@@ -45,7 +66,7 @@ runs:
     # tar output file is created under /tmp to avoid the "warning file changed as we read it" that forces exit code to 1
     # .git folder is removed before creating the tar if remove-git-folder is true - .git folder is the only dir that cannot be filtered by checkout
     - name: Compress Source Code
-      if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
       shell: bash
       run: |
         [[ "${{ inputs.remove-git-folder }}" == "true" ]] && { echo "Removing .git folder ..." ; rm -rf .git; }
@@ -53,7 +74,7 @@ runs:
         find . -name "*" -print0 | xargs -0 tar -czvf /tmp/source.tar.gz
 
     - name: Create Source Endpoint
-      if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
       shell: bash
       run: |
         echo "Creating a source endpoint ..."
@@ -65,11 +86,50 @@ runs:
         echo SOURCE_ENDPOINT=$SOURCE_ENDPOINT >> $GITHUB_ENV
 
     - name: Upload Source Code
-      if: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
       shell: bash
       run: |
         URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
         curl --fail-with-body $URL -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
+
+    # Now that the source code has been uploaded a trap EXIT is configured to catch both normal and error exit and remove the code, reducing its exposure time
+    - name: Create App Build
+      shell: bash
+      run: |
+        echo "Create App Build"
+
+        trap tarball_cleanup EXIT
+
+        tarball_cleanup() {
+            local exit_code=$?
+            
+            echo "Exiting occurred with exit code: $exit_code - removing the source code tarball ..."
+            URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
+            curl --fail-with-body $URL -X PUT -H 'Content-Type:' --data-binary ""
+            
+            exit $exit_code
+        }
+
+        SOURCE_GET_URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.get')
+        NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST https://api.heroku.com/apps/${{ inputs.heroku-app-name }}/builds \
+        -d '{"source_blob":{"url":"'"$SOURCE_GET_URL"'", "version": "'"${GITHUB_SHA::7}"'"}}' \
+        -H "Accept: application/vnd.heroku+json; version=3" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
+
+        NEW_BUILD_ID=$(echo "$NEW_BUILD_OUTPUT" | jq -er '.id')
+        OUTPUT_STREAM_URL=$(echo "$NEW_BUILD_OUTPUT" | jq -er '.output_stream_url')
+
+        echo "Getting build output..."
+        curl --silent -S --fail-with-body "$OUTPUT_STREAM_URL"
+        NEW_BUILD_STATUS=$(curl --silent -S --fail-with-body "https://api.heroku.com/apps/${{ inputs.heroku-app-name }}/builds/$NEW_BUILD_ID" \
+        -H "Accept: application/vnd.heroku+json; version=3" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
+        jq -er '.status')
+
+        echo "Build status: $NEW_BUILD_STATUS"
+        if [ "$NEW_BUILD_STATUS" != "succeeded" ]; then exit 1; fi
 
     # Now that the source code has been uploaded a trap EXIT is configured to catch both normal and error exit and remove the code, reducing its exposure time
     # Currently the only way to wait for Review App creation is polling its status ("pending" or "creating" or "created" or "deleting" or "deleted" or "errored")

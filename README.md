@@ -1,6 +1,7 @@
-# Heroku Review Apps GitHub Action
-GitHub Action to create a Heroku Review App from a private repository on pull requests using the [Heroku Source Endpoint API](https://devcenter.heroku.com/articles/build-and-release-using-the-api#sources-endpoint) to upload the code. 
+# Heroku Flow Action
+GitHub Action to upload the source code to Heroku from a private GitHub repository using the [Heroku Source Endpoint API](https://devcenter.heroku.com/articles/build-and-release-using-the-api#sources-endpoint). The uploaded code is then built to either deploy an app (on push events) or create a review app (on pull_request events).
 The Review App is automatically removed when the pull request is closed.
+
 In a GitHub Workflow, this action requires to be preceeded by the [actions/checkout](https://github.com/actions/checkout) to work properly.
 
 ## Disclaimer
@@ -10,6 +11,34 @@ The author of this article makes any warranties about the completeness, reliabil
 Create the following GitHub workflows under `.github/workflows` directory within your repository and add the following YAML files and configure them. If you need to filter files from your repository before deploy use the `sparse-checkout` option available with `actions/checkout`.<br/>
 It's possible to configure the `review-app-creation-check-timeout` (Review App creation timeout) and `review-app-creation-check-sleep-time` (sleep time while polling) input params to tune the Review App creation check process.
 
+This will be executed on push events
+```
+# push.yml
+name: Deploy push
+
+on:
+  push:
+    paths-ignore:
+      - '.github/workflows/**'
+    branches:
+      - main
+
+jobs:
+  build-push:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            /*
+            !.gitignore
+            !.github
+      - uses: abernicchia-heroku/heroku-sources-endpoint-deploy-action@v1
+        with:
+          heroku-api-key: ${{secrets.HEROKU_API_KEY}} # set it on GitHub as secret
+          heroku-app-name: ${{vars.HEROKU_APP_NAME}} # set it on GitHub as variable at repository level
+          remove-git-folder: false # if you want to override the default (true) - it's usually recommended to avoid exposing the .git folder 
+```
 
 This will be executed whenever a PR is [opened, reopened, synchronize, labeled]
 ```
