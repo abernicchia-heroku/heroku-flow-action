@@ -83,32 +83,35 @@ runs:
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
         jq -er '{get: .source_blob.get_url, put: .source_blob.put_url}')
-        echo SOURCE_ENDPOINT=$SOURCE_ENDPOINT >> $GITHUB_ENV
+        echo "SOURCE_ENDPOINT=$SOURCE_ENDPOINT" >> $GITHUB_ENV
 
     - name: Upload Source Code
+      id: upload-source-code
       if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
       shell: bash
       run: |
         URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
-        curl --fail-with-body $URL -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
+        curl --fail-with-body "$URL" -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
+        echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_OUTPUT
 
     # Now that the source code has been uploaded a trap EXIT is configured to catch both normal and error exit and remove the code, reducing its exposure time
+
     - name: Create App Build
       shell: bash
       run: |
         echo "Create App Build"
 
-        trap tarball_cleanup EXIT
+        # trap tarball_cleanup EXIT
 
-        tarball_cleanup() {
-            local exit_code=$?
+        # tarball_cleanup() {
+        #     local exit_code=$?
             
-            echo "Exiting occurred with exit code: $exit_code - removing the source code tarball ..."
-            URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
-            curl --fail-with-body $URL -X PUT -H 'Content-Type:' --data-binary ""
+        #     echo "Exiting occurred with exit code: $exit_code - removing the source code tarball ..."
+        #     URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
+        #     curl --fail-with-body $URL -X PUT -H 'Content-Type:' --data-binary ""
             
-            exit $exit_code
-        }
+        #     exit $exit_code
+        # }
 
         SOURCE_GET_URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.get')
         NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST https://api.heroku.com/apps/${{ inputs.heroku-app-name }}/builds \
@@ -132,6 +135,7 @@ runs:
         if [ "$NEW_BUILD_STATUS" != "succeeded" ]; then exit 1; fi
 
     # Now that the source code has been uploaded a trap EXIT is configured to catch both normal and error exit and remove the code, reducing its exposure time
+
     # Currently the only way to wait for Review App creation is polling its status ("pending" or "creating" or "created" or "deleting" or "deleted" or "errored")
     # Review App status check is retried up to 5 times with cURL to avoid aborting the polling phase due to transient errors
     - name: Create Review App
@@ -140,17 +144,17 @@ runs:
       run: |
         echo "Create Review App"
 
-        trap tarball_cleanup EXIT
+        # trap tarball_cleanup EXIT
 
-        tarball_cleanup() {
-            local exit_code=$?
+        # tarball_cleanup() {
+        #     local exit_code=$?
             
-            echo "Exiting occurred with exit code: $exit_code - removing the source code tarball ..."
-            URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
-            curl --fail-with-body $URL -X PUT -H 'Content-Type:' --data-binary ""
+        #     echo "Exiting occurred with exit code: $exit_code - removing the source code tarball ..."
+        #     URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
+        #     curl --fail-with-body $URL -X PUT -H 'Content-Type:' --data-binary ""
             
-            exit $exit_code
-        }
+        #     exit $exit_code
+        # }
 
         SOURCE_GET_URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.get')        
         REVIEW_APP_ID=$(curl --fail-with-body -X POST https://api.heroku.com/review-apps \
@@ -188,6 +192,16 @@ runs:
             echo "Review App creation still in progress, waiting ${{ inputs.review-app-creation-check-sleep-time }} seconds ..."
             sleep "${{ inputs.review-app-creation-check-sleep-time }}"
         done
+    
+    # If the source code has been uploaded, regardless of the previous steps status (success or failure), due to always(), the tarball is removed to reduce its exposure time
+    # SOURCE_CODE_UPLOADED is set only for pull_request != 'closed' and push then no need to check for github.event_name
+    - name: Tarball cleanup
+      if: ${{ always() && steps.upload-source-code.outputs.SOURCE_CODE_UPLOADED == 'true' }}
+      shell: bash
+      run: |
+        echo "Tarball cleanup"          
+        URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
+        curl --fail-with-body "$URL" -X PUT -H 'Content-Type:' --data-binary ""
 
     - name: Delete Review App
       if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}
