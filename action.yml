@@ -86,8 +86,8 @@ runs:
         echo SOURCE_ENDPOINT=$SOURCE_ENDPOINT >> $GITHUB_ENV
 
     - name: Upload Source Code
-      id: upload-source-code
       if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
+      id: upload-source-code
       shell: bash
       run: |
         URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
@@ -97,6 +97,7 @@ runs:
     # Now that the source code has been uploaded a trap EXIT is configured to catch both normal and error exit and remove the code, reducing its exposure time
 
     - name: Create App Build
+      if: ${{ github.event_name == 'push' }}
       shell: bash
       run: |
         echo "Create App Build"
