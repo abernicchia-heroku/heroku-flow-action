@@ -98,12 +98,11 @@ runs:
 
     - name: Upload Source Code
       if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
-      id: upload-source-code
       shell: bash
       run: |
         echo "Uploading Source Code ..."        
         curl --fail-with-body "${{ env.SOURCE_ENDPOINT_PUT }}" -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
-        echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_OUTPUT
+        echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_ENV
 
     - name: Create App Build
       if: ${{ github.event_name == 'push' }}
@@ -178,7 +177,7 @@ runs:
     # If the source code has been uploaded, regardless of the previous steps status (success or failure), due to always(), the tarball is removed to reduce its exposure time
     # SOURCE_CODE_UPLOADED is set only for pull_request != 'closed' and push then no need to check for github.event_name
     - name: Tarball cleanup
-      if: ${{ always() && steps.upload-source-code.outputs.SOURCE_CODE_UPLOADED == 'true' }}
+      if: ${{ always() && env.SOURCE_CODE_UPLOADED == 'true' }}
       shell: bash
       run: |
         echo "Tarball cleanup"          
