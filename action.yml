@@ -84,6 +84,8 @@ runs:
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
         jq -ec '{get: .source_blob.get_url, put: .source_blob.put_url}')
 
+        echo "JSON: $SOURCE_ENDPOINT_JSON"
+
         echo "::add-mask::$SOURCE_ENDPOINT_JSON"
         ############echo "::add-mask::${{ toJSON(env.SOURCE_ENDPOINT_JSON) }}"
 
