@@ -83,6 +83,8 @@ runs:
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
         jq -er '{get: .source_blob.get_url, put: .source_blob.put_url}')
+
+        echo "::add-mask::$SOURCE_ENDPOINT" 
         echo SOURCE_ENDPOINT=$SOURCE_ENDPOINT >> $GITHUB_ENV
 
     - name: Upload Source Code
@@ -90,6 +92,7 @@ runs:
       id: upload-source-code
       shell: bash
       run: |
+        echo "Uploading Source Code ..."
         URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
         curl --fail-with-body "$URL" -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
         echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_OUTPUT
