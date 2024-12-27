@@ -89,13 +89,13 @@ runs:
         echo "::add-mask::$SOURCE_ENDPOINT_JSON"
         ############echo "::add-mask::${{ toJSON(env.SOURCE_ENDPOINT_JSON) }}"
 
-        ############SOURCE_ENDPOINT_GET=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.get')
-        SOURCE_ENDPOINT_GET=$(echo ${{ env.SOURCE_ENDPOINT_JSON }} | jq -er '.get')
+        SOURCE_ENDPOINT_GET=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.get')
+        ############SOURCE_ENDPOINT_GET=$(echo ${{ env.SOURCE_ENDPOINT_JSON }} | jq -er '.get')
         ############echo "::add-mask::$SOURCE_ENDPOINT_GET"
         echo SOURCE_ENDPOINT_GET=$SOURCE_ENDPOINT_GET >> $GITHUB_ENV
         
-        ############SOURCE_ENDPOINT_PUT=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.put')
-        SOURCE_ENDPOINT_PUT=$(echo ${{ env.SOURCE_ENDPOINT_JSON }} | jq -er '.put')
+        SOURCE_ENDPOINT_PUT=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.put')
+        ############SOURCE_ENDPOINT_PUT=$(echo ${{ env.SOURCE_ENDPOINT_JSON }} | jq -er '.put')
         ############echo "::add-mask::$SOURCE_ENDPOINT_PUT"
         echo SOURCE_ENDPOINT_PUT=$SOURCE_ENDPOINT_PUT >> $GITHUB_ENV
 
