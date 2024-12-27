@@ -72,7 +72,9 @@ runs:
         [[ "${{ inputs.remove-git-folder }}" == "true" ]] && { echo "Removing .git folder ..." ; rm -rf .git; }
         echo "Compressing Source Code ..."
         find . -name "*" -print0 | xargs -0 tar -czvf /tmp/source.tar.gz
-
+    
+    # SOURCE_ENDPOINT_GET/PUT are masked to avoid being logged in clear text
+    # jq -ec is used to have a single JSON object per line as ::add-mask:: does not work with multilines
     - name: Create Source Endpoint
       if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
       shell: bash
