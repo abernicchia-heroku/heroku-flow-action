@@ -84,7 +84,8 @@ runs:
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
         jq -er '{get: .source_blob.get_url, put: .source_blob.put_url}')
 
-        echo "::add-mask::$SOURCE_ENDPOINT" 
+        echo "::add-mask::$SOURCE_ENDPOINT"
+        echo "::add-mask::${{ toJSON(env.SOURCE_ENDPOINT) }}"
         echo SOURCE_ENDPOINT=$SOURCE_ENDPOINT >> $GITHUB_ENV
 
     - name: Upload Source Code
