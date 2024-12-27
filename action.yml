@@ -78,15 +78,15 @@ runs:
       shell: bash
       run: |
         echo "Creating a source endpoint ..."
-        SOURCE_ENDPOINT=$(curl --fail-with-body -X POST https://api.heroku.com/sources \
+        SOURCE_ENDPOINT_JSON=$(curl --fail-with-body -X POST https://api.heroku.com/sources \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
-        jq -er '{get: .source_blob.get_url, put: .source_blob.put_url}')
+        jq -ec '{get: .source_blob.get_url, put: .source_blob.put_url}')
 
-        echo "::add-mask::$SOURCE_ENDPOINT"
-        echo "::add-mask::${{ toJSON(env.SOURCE_ENDPOINT) }}"
-        echo SOURCE_ENDPOINT=$SOURCE_ENDPOINT >> $GITHUB_ENV
+        echo "::add-mask::$SOURCE_ENDPOINT_JSON"
+        echo "::add-mask::${{ toJSON(env.SOURCE_ENDPOINT_JSON) }}"
+        echo SOURCE_ENDPOINT_JSON=$SOURCE_ENDPOINT_JSON >> $GITHUB_ENV
 
     - name: Upload Source Code
       if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
@@ -94,7 +94,7 @@ runs:
       shell: bash
       run: |
         echo "Uploading Source Code ..."
-        URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
+        URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.put')
         curl --fail-with-body "$URL" -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
         echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_OUTPUT
 
@@ -104,7 +104,7 @@ runs:
       run: |
         echo "Create App Build"
 
-        SOURCE_GET_URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.get')
+        SOURCE_GET_URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.get')
         NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST https://api.heroku.com/apps/${{ inputs.heroku-app-name }}/builds \
         -d '{"source_blob":{"url":"'"$SOURCE_GET_URL"'", "version": "'"${GITHUB_SHA::7}"'"}}' \
         -H "Accept: application/vnd.heroku+json; version=3" \
@@ -133,7 +133,7 @@ runs:
       run: |
         echo "Create Review App"
 
-        SOURCE_GET_URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.get')        
+        SOURCE_GET_URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.get')        
         REVIEW_APP_ID=$(curl --fail-with-body -X POST https://api.heroku.com/review-apps \
         -d '{"source_blob":{"url":"'"$SOURCE_GET_URL"'", "version": "'"${GITHUB_SHA::7}"'"},
         "pipeline":"'"${{ inputs.heroku-pipeline-id }}"'",
@@ -177,7 +177,7 @@ runs:
       shell: bash
       run: |
         echo "Tarball cleanup"          
-        URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT) }} | jq -er '.put')
+        URL=$(echo ${{ toJSON(env.SOURCE_ENDPOINT_JSON) }} | jq -er '.put')
         curl --fail-with-body "$URL" -X PUT -H 'Content-Type:' --data-binary ""
 
     - name: Delete Review App
