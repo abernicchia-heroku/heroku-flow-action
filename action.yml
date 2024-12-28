@@ -32,8 +32,10 @@ runs:
   using: "composite"
   steps:
     # GitHub Actions does not enforce required inputs https://github.com/actions/runner/issues/1070
+    # workflow_dispatch and schedule events are managed the same as push events to allow manual and scheduled app build and deploy
+    # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows
     - name: Validate common inputs
-      if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
+      if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
       run: |
         echo "Validating common inputs ..."
@@ -42,7 +44,7 @@ runs:
         echo "All inputs are valid"
 
     - name: Validate push inputs
-      if: ${{ github.event_name == 'push' }}
+      if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
       run: |
         echo "Validating push inputs ..."
@@ -66,7 +68,7 @@ runs:
     # tar output file is created under /tmp to avoid the "warning file changed as we read it" that forces exit code to 1
     # .git folder is removed before creating the tar if remove-git-folder is true - .git folder is the only dir that cannot be filtered by checkout
     - name: Compress Source Code
-      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
+      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
       run: |
         [[ "${{ inputs.remove-git-folder }}" == "true" ]] && { echo "Removing .git folder ..." ; rm -rf .git; }
@@ -76,7 +78,7 @@ runs:
     # SOURCE_ENDPOINT_GET/PUT are masked to avoid being logged in clear text
     # jq -ec is used to have a single JSON object per line as ::add-mask:: does not work with multilines
     - name: Create Source Endpoint
-      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
+      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
       run: |
         echo "Creating a source endpoint ..."
@@ -97,7 +99,7 @@ runs:
         echo SOURCE_ENDPOINT_PUT=$SOURCE_ENDPOINT_PUT >> $GITHUB_ENV
 
     - name: Upload Source Code
-      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') }}
+      if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
       run: |
         echo "Uploading Source Code ..."        
@@ -105,7 +107,7 @@ runs:
         echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_ENV
 
     - name: Create App Build
-      if: ${{ github.event_name == 'push' }}
+      if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
       run: |
         echo "Create App Build"

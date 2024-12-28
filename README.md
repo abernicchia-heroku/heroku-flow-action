@@ -1,6 +1,7 @@
 # Heroku Flow Action
-GitHub Action to upload the source code to Heroku from a private GitHub repository using the [Heroku Source Endpoint API](https://devcenter.heroku.com/articles/build-and-release-using-the-api#sources-endpoint). The uploaded code is then built to either deploy an app (on push events) or create a review app (on pull_request events).
-The Review App is automatically removed when the pull request is closed.
+GitHub Action to upload the source code to Heroku from a private GitHub repository using the [Heroku Source Endpoint API](https://devcenter.heroku.com/articles/build-and-release-using-the-api#sources-endpoint). The uploaded code is then built to either deploy an app (on push, workflow_dispatch and schedule events) or create a review app (on pull_request events).
+The Review App is automatically removed when the pull request is closed (on pull_request events when the action is 'closed').
+The action handles only the above mentioned events to prevent unexpected behavior, handling event-specific requirements and improving action reliability.
 
 In a GitHub Workflow, this action requires to be preceeded by the [actions/checkout](https://github.com/actions/checkout) to work properly.
 
