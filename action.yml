@@ -164,7 +164,7 @@ runs:
         jq -er '.status')
 
         echo "Build status: $NEW_BUILD_STATUS"
-        [[ "$NEW_BUILD_STATUS" != "succeeded" ]] && { echo "Build failed" ; exit 1; }
+        [[ "$NEW_BUILD_STATUS" != "succeeded" ]] && { echo "Build failed" ; exit 10; }
 
     # Currently the only way to wait for Review App creation is polling its status ("pending" or "creating" or "created" or "deleting" or "deleted" or "errored")
     # Review App status check is retried up to 5 times with cURL to avoid aborting the polling phase due to transient errors
