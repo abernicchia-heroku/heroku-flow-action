@@ -140,7 +140,7 @@ runs:
         APP_ID=${{ inputs.heroku-app-name }}
 
         if [ ${{ github.event_name }} == 'pull_request' && ${{ github.event.action }} == 'synchronize' && "${{ env.CREATE_APP_BUILD_ON_SYNCHRONIZE }}" == "true" ]; then
-          APP_ID=${{ env.REVIEWAPP_APP_ID }} $
+          APP_ID=${{ env.REVIEWAPP_APP_ID }}
         else
           echo "Skipping App Build creation on synchronize" 
           exit 0
