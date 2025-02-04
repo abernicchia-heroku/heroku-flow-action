@@ -30,7 +30,7 @@ on:
   pull_request:
     paths-ignore:
       - '.github/workflows/**'
-    types: [opened, reopened, synchronize, labeled, closed]
+    types: [opened, reopened, synchronize, closed]
 
 jobs:
   push-and-pr:
@@ -82,7 +82,7 @@ jobs:
           remove-git-folder: false # if you want to override the default (true) - it's usually recommended to avoid exposing the .git folder 
 ```
 
-This will be executed whenever a PR is [opened, reopened, synchronize, labeled]
+This will be executed whenever a PR is [opened, reopened, synchronize]
 ```
 # pr-opened.yml
 name: Deploy PR (create Review App)
@@ -91,7 +91,7 @@ on:
   pull_request:
     paths-ignore:
       - '.github/workflows/**'
-    types: [opened, reopened, synchronize, labeled]
+    types: [opened, reopened, synchronize]
 
 jobs:
   build-pr:

@@ -102,17 +102,51 @@ runs:
       if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
       run: |
-        echo "Uploading Source Code ..."        
+        echo "Uploading Source Code ..."
         curl --fail-with-body "${{ env.SOURCE_ENDPOINT_PUT }}" -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
         echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_ENV
 
+    # Whenever a PR branch is updated, the related Review App is looked for and the latest commit is deployed to it. This avoids to create a new Review App (RA) and fail due to an existing RA with the same pr_number/branch
+    # If a RA exists a new build is created on [Create App Build] step, otherwise a new RA is created on [Create Review App] step. The latter case is possible if a previous RA has been deleted, but the PR branch is still present. 
+    # In such case, it’s safe to use “jq -r” (instead of “jq -re”) to avoid exiting with an error when no Review App is found with a specific pr_number/branch (e.g. due to manual/automated removal of the app). In this case the REVIEWAPP_APP_ID (.app.id) is empty
+    - name: Sync Review App
+      if: ${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize') }}
+      shell: bash
+      run: |
+        echo "Sync Review App"
+
+        REVIEWAPP_APP_ID=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/vnd.heroku+json; version=3" \
+        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
+        jq -r 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == "${{ github.event.pull_request.head.ref }}")) | .app.id) | .[]')
+
+        if [ -n "$REVIEWAPP_APP_ID" ]; then
+          echo "Creating a new build for an existing Review App $REVIEWAPP_APP_ID ..."
+
+          echo REVIEWAPP_APP_ID=$REVIEWAPP_APP_ID >> $GITHUB_ENV
+          echo "CREATE_APP_BUILD_ON_SYNCHRONIZE=true" >> $GITHUB_ENV
+        else
+          echo "No Review App found to sync, creating a new Review App ..."
+          echo "CREATE_REVIEWAPP_ON_SYNCHRONIZE=true" >> $GITHUB_ENV
+        fi
+
     - name: Create App Build
-      if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
+      if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.action == 'synchronize') }}
       shell: bash
       run: |
         echo "Create App Build"
 
-        NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST https://api.heroku.com/apps/${{ inputs.heroku-app-name }}/builds \
+        APP_ID=${{ inputs.heroku-app-name }}
+
+        if [ ${{ github.event_name }} == 'pull_request' && ${{ github.event.action }} == 'synchronize' && "${{ env.CREATE_APP_BUILD_ON_SYNCHRONIZE }}" == "true" ]; then
+          APP_ID=${{ env.REVIEWAPP_APP_ID }} $
+        else
+          echo "Skipping App Build creation on synchronize" 
+          exit 0
+        fi
+
+        NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST "https://api.heroku.com/apps/$APP_ID/builds" \
         -d '{"source_blob":{"url":"'"${{ env.SOURCE_ENDPOINT_GET }}"'", "version": "'"${GITHUB_SHA::7}"'"}}' \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
@@ -123,22 +157,24 @@ runs:
 
         echo "Getting build output..."
         curl --silent -S --fail-with-body "$OUTPUT_STREAM_URL"
-        NEW_BUILD_STATUS=$(curl --silent -S --fail-with-body "https://api.heroku.com/apps/${{ inputs.heroku-app-name }}/builds/$NEW_BUILD_ID" \
+        NEW_BUILD_STATUS=$(curl --silent -S --fail-with-body "https://api.heroku.com/apps/$APP_ID/builds/$NEW_BUILD_ID" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
         jq -er '.status')
 
         echo "Build status: $NEW_BUILD_STATUS"
-        if [ "$NEW_BUILD_STATUS" != "succeeded" ]; then exit 1; fi
+        [[ "$NEW_BUILD_STATUS" != "succeeded" ]] && { echo "Build failed" ; exit 1; }
 
     # Currently the only way to wait for Review App creation is polling its status ("pending" or "creating" or "created" or "deleting" or "deleted" or "errored")
     # Review App status check is retried up to 5 times with cURL to avoid aborting the polling phase due to transient errors
     - name: Create Review App
-      if: ${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize' || github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'labeled') }}
+      if: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize') }}
       shell: bash
       run: |
         echo "Create Review App"
+
+        [[ ${{ github.event.action }} == 'synchronize' && "${{ env.CREATE_REVIEWAPP_ON_SYNCHRONIZE }}" != "true" ]] && { echo "Skipping Review App creation on synchronize" ; exit 0; }
 
         REVIEW_APP_ID=$(curl --fail-with-body -X POST https://api.heroku.com/review-apps \
         -d '{"source_blob":{"url":"'"${{ env.SOURCE_ENDPOINT_GET }}"'", "version": "'"${GITHUB_SHA::7}"'"},
@@ -184,7 +220,8 @@ runs:
       run: |
         echo "Tarball cleanup"          
         curl --fail-with-body "${{ env.SOURCE_ENDPOINT_PUT }}" -X PUT -H 'Content-Type:' --data-binary ""
-
+    
+    # In such case, it’s safe to use “jq -r” (instead of “jq -re”) to avoid exiting with an error when no Review App is found with a specific pr_number/branch (e.g. due to manual/automated removal of the app). In this case the REVIEWAPP_ID_TOBEDELETED (.id) is empty
     - name: Delete Review App
       if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}
       shell: bash
@@ -193,10 +230,14 @@ runs:
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
-        jq -er 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == "${{ github.event.pull_request.head.ref }}")) | .id) | .[]')
+        jq -r 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == "${{ github.event.pull_request.head.ref }}")) | .id) | .[]')
 
-        echo "Deleting Review App $REVIEWAPP_ID_TOBEDELETED ..."
-        curl --fail-with-body -X DELETE "https://api.heroku.com/review-apps/$REVIEWAPP_ID_TOBEDELETED" \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/vnd.heroku+json; version=3" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}"
+        if [ -n "$REVIEWAPP_ID_TOBEDELETED" ]; then
+          echo "Deleting Review App $REVIEWAPP_ID_TOBEDELETED ..."
+          curl --fail-with-body -X DELETE "https://api.heroku.com/review-apps/$REVIEWAPP_ID_TOBEDELETED" \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/vnd.heroku+json; version=3" \
+          -H "Authorization: Bearer ${{ inputs.heroku-api-key }}"
+        else
+          echo "No Review App found to delete"
+        fi
