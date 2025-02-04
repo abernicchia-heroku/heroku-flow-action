@@ -148,23 +148,14 @@ runs:
           fi
         fi
 
-                echo "DEBUG 1"
-
-
         NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST "https://api.heroku.com/apps/$APP_ID/builds" \
         -d '{"source_blob":{"url":"'"${{ env.SOURCE_ENDPOINT_GET }}"'", "version": "'"${GITHUB_SHA::7}"'"}}' \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
 
-                        echo "DEBUG 2"
-
-
         NEW_BUILD_ID=$(echo "$NEW_BUILD_OUTPUT" | jq -er '.id')
         OUTPUT_STREAM_URL=$(echo "$NEW_BUILD_OUTPUT" | jq -er '.output_stream_url')
-
-                        echo "DEBUG 3"
-
 
         echo "Getting build output..."
         curl --silent -S --fail-with-body "$OUTPUT_STREAM_URL"
