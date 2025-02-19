@@ -252,6 +252,7 @@ runs:
       env:
         PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
+        echo "PR_HEAD_REF: $PR_HEAD_REF"
         REVIEWAPP_ID_TOBEDELETED=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
