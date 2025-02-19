@@ -118,11 +118,12 @@ runs:
       run: |
         echo "Sync Review App"
 
-        REVIEWAPP_APP_ID=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
+        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
-        jq -r --arg pr_head_ref_arg "$PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .app.id) | .[]')
+        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
+
+        REVIEWAPP_APP_ID=$(echo "$RESPONSE" | jq -r --arg pr_head_ref_arg "$PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .app.id) | .[]')
 
         if [ -n "$REVIEWAPP_APP_ID" ]; then
           echo "Creating a new build for an existing Review App $REVIEWAPP_APP_ID ..."
@@ -252,7 +253,6 @@ runs:
       env:
         PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
-        echo "PR_HEAD_REF: $PR_HEAD_REF"
         RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
