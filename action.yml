@@ -122,7 +122,7 @@ runs:
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
-        jq -r 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == "$PR_HEAD_REF")) | .app.id) | .[]')
+        jq -r 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $PR_HEAD_REF)) | .app.id) | .[]')
 
         if [ -n "$REVIEWAPP_APP_ID" ]; then
           echo "Creating a new build for an existing Review App $REVIEWAPP_APP_ID ..."
@@ -256,7 +256,7 @@ runs:
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
-        jq -r 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == "$PR_HEAD_REF")) | .id) | .[]')
+        jq -r 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $PR_HEAD_REF)) | .id) | .[]')
 
         if [ -n "$REVIEWAPP_ID_TOBEDELETED" ]; then
           echo "Deleting Review App $REVIEWAPP_ID_TOBEDELETED ..."
