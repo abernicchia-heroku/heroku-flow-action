@@ -253,11 +253,12 @@ runs:
         PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
         echo "PR_HEAD_REF: $PR_HEAD_REF"
-        REVIEWAPP_ID_TOBEDELETED=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
+        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \       
-        jq -r --arg pr_head_ref_arg "$PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .id) | .[]')
+        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
+
+        REVIEWAPP_ID_TOBEDELETED=$(echo "$RESPONSE" | jq -r --arg pr_head_ref_arg "$PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .id) | .[]')
 
         if [ -n "$REVIEWAPP_ID_TOBEDELETED" ]; then
           echo "Deleting Review App $REVIEWAPP_ID_TOBEDELETED ..."
