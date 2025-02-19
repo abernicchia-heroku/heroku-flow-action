@@ -2,18 +2,46 @@
 > This repository is a work in progress and is not intended for external use at this time. Please follow the repository for future updates.
 
 # Heroku Flow Action
-GitHub Action to upload the source code to Heroku from a private GitHub repository using the [Heroku Source Endpoint API](https://devcenter.heroku.com/articles/build-and-release-using-the-api#sources-endpoint). The uploaded code is then built to either deploy an app (on push, workflow_dispatch and schedule events) or create a review app (on pull_request events).
+GitHub Action to upload the source code to Heroku from a private GitHub repository using the [Heroku Source Endpoint API](https://devcenter.heroku.com/articles/build-and-release-using-the-api#sources-endpoint). It mimics and extend the [Heroku GitHub integration](https://devcenter.heroku.com/articles/github-integration). The uploaded code is built to either deploy an app (on push, workflow_dispatch and schedule events) or create/update a review app (on pull_request events such as 'opened', 'reopened', 'synchronize'). Whenever a PR branch is updated, the latest commit is deployed to the review app if existing, otherwise a new review app is created. 
 The Review App is automatically removed when the pull request is closed (on pull_request events when the action is 'closed').
 The action handles only the above mentioned events to prevent unexpected behavior, handling event-specific requirements and improving action reliability.
 
-In a GitHub Workflow, this action requires to be preceeded by the [actions/checkout](https://github.com/actions/checkout) to work properly.
+Despite it's possible to use this Action to create review apps without configuring the [Heroku GitHub integration](https://devcenter.heroku.com/articles/github-integration), to display them within your Pipeline it's necessary to enable it. It's enough to use an empty repository unrelated to your actual source repository and GitHub Org used by the Action, this will be used only as a workaround to make review apps visible. In this case the link shown in the Review App won't refer to your source code.
+
+The [Heroku CI](https://devcenter.heroku.com/articles/heroku-ci) is not triggered with this Action as it's only activated via the Heroku GitHub integration.
+
+# Supported Use Cases
+
+- Review App creation on PR open
+- Review App build and deploy on PR branch commit
+- Review App creation on PR commit when no RA exists (e.g. deleted after the PR creation)
+- Review App removal on PR close (without commit/merge to the main branch)
+- Review App removal on PR close (with commit/merge to the main branch)
+- App build and deploy on code push
+- Manual App build and deploy via GitHub Actions “Run Workflow”
+- Scheduled App build and deploy via GitHub Actions cron/scheduler
+
 
 ## Disclaimer
 The author of this article makes any warranties about the completeness, reliability and accuracy of this information. **Any action you take upon the information of this website is strictly at your own risk**, and the author will not be liable for any losses and damages in connection with the use of the website and the information provided. **None of the items included in this repository form a part of the Heroku Services.**
 
 ## How to use it
-Create a `.github/workflows` directory within your repository using the following YAML files (either an all-in-one file `push-and-pr.yml` or three separate files `push.yml`, `pr-opened.yml`, `pr-closed.yml` to deal with specific workflows) and configure them. If you need to filter files from your repository before deploy use the `sparse-checkout` option available with `actions/checkout`.<br/>
-It's possible to configure the `review-app-creation-check-timeout` (Review App creation timeout) and `review-app-creation-check-sleep-time` (sleep time while polling) input params to tune the Review App creation check process.
+Create a `.github/workflows` directory within your repository using the following YAML files (either an all-in-one file `push-and-pr.yml` or three separate files `push.yml`, `pr-opened.yml`, `pr-closed.yml` to deal with specific workflows) and configure them. <br/>
+
+Additionally, if you want to enable the rebuild of an app manually or on schedule use `rebuild-app.yml`.
+
+Configure the workflow files with the following input parameters:
+  - `heroku-api-key` [required] Heroku API key used to create and deploy apps. Set it on GitHub as secret
+  - `heroku-app-name` [required] Heroku app name. Set it on GitHub as variable at repository level
+  - `heroku-pipeline-id` [required] used only for review apps creation. Set it on GitHub as variable at repository level
+  - `remove-git-folder` [optional] overrides the default (true) - it's usually recommended to avoid exposing the .git folder
+  - `review-app-creation-check-timeout` [optional] Review App creation timeout
+  - `review-app-creation-check-sleep-time` [optional] sleep time while polling for Review Apps status
+
+In a GitHub Workflow, this action requires to be preceeded by the [actions/checkout](https://github.com/actions/checkout) to work properly. If you need to filter files from your repository before deploy use the `sparse-checkout` option available with `actions/checkout`.
+
+
+## Workflow examples
 
 This will be executed on push and pull_request events
 ```
@@ -42,7 +70,7 @@ jobs:
             /*
             !.gitignore
             !.github
-      - uses: abernicchia-heroku/heroku-flow-action@v1
+      - uses: heroku-reference-apps/github-heroku-flow-action@v1
         with:
           heroku-api-key: ${{secrets.HEROKU_API_KEY}} # set it on GitHub as secret
           remove-git-folder: false # if you want to override the default (true) - it's usually recommended to avoid exposing the .git folder 
@@ -75,7 +103,7 @@ jobs:
             /*
             !.gitignore
             !.github
-      - uses: abernicchia-heroku/heroku-flow-action@v1
+      - uses: heroku-reference-apps/github-heroku-flow-action@v1
         with:
           heroku-api-key: ${{secrets.HEROKU_API_KEY}} # set it on GitHub as secret
           heroku-app-name: ${{vars.HEROKU_APP_NAME}} # set it on GitHub as variable at repository level
@@ -103,7 +131,7 @@ jobs:
             /*
             !.gitignore
             !.github
-      - uses: abernicchia-heroku/heroku-flow-action@v1
+      - uses: heroku-reference-apps/github-heroku-flow-action@v1
         with:
           heroku-api-key: ${{secrets.HEROKU_API_KEY}} # set it on GitHub as secret
           heroku-pipeline-id: ${{vars.HEROKU_REVIEWAPP_PIPELINE}} # set it on GitHub as variable at repository level
@@ -127,8 +155,63 @@ jobs:
   close-pr:
     runs-on: self-hosted
     steps:
-      - uses: abernicchia-heroku/heroku-flow-action@v1
+      - uses: heroku-reference-apps/github-heroku-flow-action@v1
         with:
           heroku-api-key: ${{secrets.HEROKU_API_KEY}} # set it on GitHub as secret
           heroku-pipeline-id: ${{vars.HEROKU_REVIEWAPP_PIPELINE}} # set it on GitHub as variable at repository level
 ```
+
+This will be executed on schedule and workflow_dispatch events
+```
+# rebuild-app.yml
+name: Rebuild App manually or on schedule
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: '0 1 * * 0'
+
+jobs:
+  rebuild-app:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: heroku-reference-apps/github-heroku-flow-action@v1
+        with:
+          heroku-api-key: ${{secrets.HEROKU_API_KEY}} # set it on GitHub as secret
+          heroku-app-name: ${{vars.HEROKU_APPNAME}} # set it on GitHub as variable
+```
+
+## Security Notes and Recommendations
+Below are summarised some general recommendations to improve security for using GitHub Actions and self-hosted runners, for a complete guide and further details please refer to [Security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions):
+- using self-hosted runners with private repositories. This is because forks of your public repository can potentially run dangerous code on your self-hosted runner machine by creating a pull request that executes the code in a workflow
+- disable [Run workflows from fork pull requests](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#enabling-workflows-for-forks-of-private-repositories) as it could be a potential source of leakage for secrets running in workflows
+- using only audited actions for specific GitHub Org(s), this can be enforced at GitHub level
+- using “Push rulesets” to block pushes to private/internal repos based on files paths. This can prevent changing the original Workflow or action and inject malicious code
+- configuring a HEROKU_API_KEY at Repo level instead of Org level. This key can be tied to a Heroku user account that has limited permissions to a specific app (the one tied with the repository) limiting the attack area (to others app) in case the HEROKU_API_KEY is being leaked or stolen
+- using Runner Groups to [restrict runners to specific repos](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/managing-access-to-self-hosted-runners-using-groups#changing-which-repositories-can-access-a-runner-group)
+- using dependabot to keep your repositories and Actions up to date. Dependabot can run on GitHub runners [free of charge](https://github.blog/changelog/2024-05-13-dependabot-core-is-now-open-source-with-an-mit-license/)
+- being caution when adding outside collaborators on GitHub — users with read permissions can view logs for workflow failures, view workflow history, as well as search and download logs
+- handling secrets, tokens and keys securely
+- avoid script injections, using an action instead of an inline script
+- isolating the runners from other environments if you want to limit potential access due to software bugs or security issues
+- the amount of sensitive information in the runner environment should be kept to a minimum, always be mindful that any user capable of invoking workflows has access to this environment
+- accessing to logs and/or secrets through forked repositories should be examined
+- auditing and rotating registered secrets
+- consider requiring review for access to secrets
+- using [CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners) to monitor repository changes
+- using [workflow templates](https://docs.github.com/en/actions/writing-workflows/using-workflow-templates) for code scanning
+- restricting permissions for tokens / permissions for the GITHUB_TOKEN
+- restricting [default permissions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication) granted to GITHUB_TOKEN when running workflows (e.g. Read repository contents and package permissions)
+- using third-party Actions: pin actions to a full length commit SHA, audit the source code, pin actions to a tag only if you trust the creator
+- prevent GitHub Actions from creating or approving pull requests
+- using [OpenSSF Scorecards](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-openssf-scorecards-to-secure-workflow-dependencies) to secure workflows
+- evaluating potential impact of a compromised runner (e.g. accessing secrets, exfiltrating data from a runner, stealing the job's GITHUB_TOKEN, modifying the contents of a repository, ...)
+- considering [cross-repository access](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#considering-cross-repository-access)
+- auditing GitHub Actions events
+- using the runner HIDDEN_ENV_VARS to avoid logging sensible application env vars to the GitHub logs
+
+## Limits and Considerations
+- take into account potential dynos disk limits based on the repository size. Source code is downloaded under the [GITHUB_WORKSPACE](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables#default-environment-variables) (default /home/runner/work/my-repo-name/my-repo-name) and the tarball is created under /tmp
+- be mindufl of the number of API calls per Heroku user that you can utilise [4500/h](https://devcenter.heroku.com/articles/limits#heroku-api-limits) executing this Action. You may workaround the limit using different Heroku users for different Heroku-hosted runners
