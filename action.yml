@@ -155,8 +155,16 @@ runs:
           fi
         fi
 
+        DATA=$(jq -n --arg gh_sha_arg "${GITHUB_SHA::7}" \
+        '{
+            "source_blob": {
+              "url": "${{ env.SOURCE_ENDPOINT_GET }}",
+              "version": $gh_sha_arg
+            }
+        }')
+
         NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST "https://api.heroku.com/apps/$APP_ID/builds" \
-        -d '{"source_blob":{"url":"'"${{ env.SOURCE_ENDPOINT_GET }}"'", "version": "'"${GITHUB_SHA::7}"'"}}' \
+        -d "$DATA" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
@@ -189,7 +197,7 @@ runs:
 
     # Currently the only way to wait for Review App creation is polling its status ("pending" or "creating" or "created" or "deleting" or "deleted" or "errored")
     # Review App status check is retried up to 5 times with cURL to avoid aborting the polling phase due to transient errors
-    # to avoid untrusted input from github.event.pull_request.head.ref its value is copied to an env var before being used - see https://securitylab.github.com/resources/github-actions-untrusted-input/
+    # to avoid untrusted input from github.event.pull_request.head.ref its value is copied to an env var before being used and escaped via jq - see https://securitylab.github.com/resources/github-actions-untrusted-input/
     - name: Create Review App
       if: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize') }}
       shell: bash
@@ -200,11 +208,11 @@ runs:
 
         [[ ${{ github.event.action }} == 'synchronize' && "${{ env.CREATE_REVIEWAPP_ON_SYNCHRONIZE }}" != "true" ]] && { echo "Skipping Review App creation on synchronize" ; exit 0; }
 
-        DATA=$(jq -n --arg pr_head_ref_arg "$PR_HEAD_REF" --arg pr_version_arg "${GITHUB_SHA::7}" \
+        DATA=$(jq -n --arg pr_head_ref_arg "$PR_HEAD_REF" --arg gh_sha_arg "${GITHUB_SHA::7}" \
         '{
             "source_blob": {
               "url": "${{ env.SOURCE_ENDPOINT_GET }}",
-              "version": $pr_version_arg
+              "version": $gh_sha_arg
             },
             "pipeline": "${{ inputs.heroku-pipeline-id }}",
             "pr_number": ${{ github.event.pull_request.number }},
