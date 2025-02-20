@@ -200,11 +200,11 @@ runs:
 
         [[ ${{ github.event.action }} == 'synchronize' && "${{ env.CREATE_REVIEWAPP_ON_SYNCHRONIZE }}" != "true" ]] && { echo "Skipping Review App creation on synchronize" ; exit 0; }
 
-        DATA=$(jq -n --arg pr_head_ref_arg "$PR_HEAD_REF" \
+        DATA=$(jq -n --arg pr_head_ref_arg "$PR_HEAD_REF" --arg pr_version_arg "${GITHUB_SHA::7}" \
         '{
             "source_blob": {
               "url": "${{ env.SOURCE_ENDPOINT_GET }}",
-              "version": "${GITHUB_SHA::7}"
+              "version": $pr_version_arg
             },
             "pipeline": "${{ inputs.heroku-pipeline-id }}",
             "pr_number": ${{ github.event.pull_request.number }},
