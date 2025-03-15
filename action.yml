@@ -163,6 +163,7 @@ runs:
       if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.action == 'synchronize') }}
       shell: bash
       env:
+        IN_HEROKU_API_KEY: ${{ inputs.heroku-api-key }}
         IN_HEROKU_APP_NAME: ${{ inputs.heroku-app-name }}
       run: |
         echo "Create App Build"
@@ -225,6 +226,7 @@ runs:
       if: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize') }}
       shell: bash
       env:
+        IN_HEROKU_API_KEY: ${{ inputs.heroku-api-key }}
         IN_HEROKU_PIPELINE_ID: ${{ inputs.heroku-pipeline-id }}
         GHEV_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
@@ -242,8 +244,6 @@ runs:
             "pr_number": ${{ github.event.pull_request.number }},
             "branch": $pr_head_ref_arg
         }')
-
-        echo "$DATA"
 
         REVIEW_APP_ID=$(curl --fail-with-body -X POST https://api.heroku.com/review-apps \
         -d "$DATA" \
