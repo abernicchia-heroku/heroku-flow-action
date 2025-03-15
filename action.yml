@@ -43,7 +43,7 @@ runs:
         IN_HEROKU-API-KEY: ${{ inputs.heroku-api-key }}
         IN_REMOVE-GIT-FOLDER: ${{ inputs.remove-git-folder }}
       run: |
-        echo "Validating common inputs ... GIT-FOLDER $IN_REMOVE-GIT-FOLDER"
+        echo "Validating common inputs ... $IN_REMOVE-GIT-FOLDER"
         [[ "$IN_HEROKU-API-KEY" ]] || { echo "heroku-api-key is required"; exit 1; }
         [[ "$IN_HEROKU-API-KEY" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "heroku-api-key contains invalid characters"; exit 1; }
         [[ "$IN_REMOVE-GIT-FOLDER" != "true" && "$IN_REMOVE-GIT-FOLDER" != "false" ]] && { echo "invalid value for remove-git-folder input. Expected 'true' or 'false'"; exit 1; }
