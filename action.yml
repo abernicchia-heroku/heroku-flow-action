@@ -44,9 +44,9 @@ runs:
         IN_REMOVE-GIT-FOLDER: ${{ inputs.remove-git-folder }}
       run: |
         echo "Validating common inputs ..."
+        [[ "$IN_REMOVE-GIT-FOLDER" != "true" && "$IN_REMOVE-GIT-FOLDER" != "false" ]] && { echo "invalid value for remove-git-folder input. Expected 'true' or 'false'"; exit 1; }
         [[ "$IN_HEROKU-API-KEY" ]] || { echo "heroku-api-key is required"; exit 1; }
         [[ "$IN_HEROKU-API-KEY" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "heroku-api-key contains invalid characters"; exit 1; }
-        [[ "$IN_REMOVE-GIT-FOLDER" != "true" && "$IN_REMOVE-GIT-FOLDER" != "false" ]] && { echo "invalid value for remove-git-folder input. Expected 'true' or 'false'"; exit 1; }
         echo "All inputs are valid"
 
     - name: Validate push inputs
