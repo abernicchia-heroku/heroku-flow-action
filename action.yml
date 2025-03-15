@@ -243,6 +243,8 @@ runs:
             "branch": $pr_head_ref_arg
         }')
 
+        echo "$DATA"
+
         REVIEW_APP_ID=$(curl --fail-with-body -X POST https://api.heroku.com/review-apps \
         -d "$DATA" \
         -H "Accept: application/vnd.heroku+json; version=3" \
