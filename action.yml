@@ -232,13 +232,13 @@ runs:
 
         [[ ${{ github.event.action }} == 'synchronize' && "${{ env.CREATE_REVIEWAPP_ON_SYNCHRONIZE }}" != "true" ]] && { echo "Skipping Review App creation on synchronize" ; exit 0; }
 
-        DATA=$(jq -n --arg pr_head_ref_arg "$GHEV_PR_HEAD_REF" --arg gh_sha_arg "${GITHUB_SHA::7}" \
+        DATA=$(jq -n --arg pr_head_ref_arg "$GHEV_PR_HEAD_REF" --arg in_heroku_pipeline_id "$IN_HEROKU_PIPELINE_ID" --arg gh_sha_arg "${GITHUB_SHA::7}" \
         '{
             "source_blob": {
               "url": "${{ env.SOURCE_ENDPOINT_GET }}",
               "version": $gh_sha_arg
             },
-            "pipeline": "$IN_HEROKU_PIPELINE_ID",
+            "pipeline": $in_heroku_pipeline_id,
             "pr_number": ${{ github.event.pull_request.number }},
             "branch": $pr_head_ref_arg
         }')
