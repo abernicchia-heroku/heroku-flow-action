@@ -8,7 +8,7 @@ inputs:
   remove-git-folder:
     description: "When true the .git/ folder is removed before creating the tar"
     required: false
-    default: true
+    default: "true"
   heroku-app-name:
     description: "Your Heroku App name when code is pushed"
     required: true
@@ -18,11 +18,11 @@ inputs:
   review-app-creation-check-timeout:
     description: "Review App creation check timeout. Polling for the Review App creation up to timeout (in seconds)"
     required: false
-    default: 3600
+    default: "3600"
   review-app-creation-check-sleep-time:
     description: "While polling for the Review App creation it sleeps for this amount of time (in seconds), min 5 seconds to avoid tight loop and API calls consumption"
     required: false
-    default: 10
+    default: "10"
 
 branding:
   icon: "play-circle"
@@ -34,32 +34,49 @@ runs:
     # GitHub Actions does not enforce required inputs https://github.com/actions/runner/issues/1070
     # workflow_dispatch and schedule events are managed the same as push events to allow manual and scheduled app build and deploy
     # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows
+    # INPUT_<VARS> are not available using composite actions https://docs.github.com/en/actions/sharing-automations/creating-actions/metadata-syntax-for-github-actions#example-specifying-inputs
+    # all inputs are validated before being used in the following steps
     - name: Validate common inputs
       if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
+      env:
+        IN_HEROKU-API-KEY: ${{ inputs.heroku-api-key }}
+        IN_REMOVE-GIT-FOLDER: ${{ inputs.remove-git-folder }}
       run: |
         echo "Validating common inputs ..."
-        [[ "${{ inputs.heroku-api-key }}" ]] || { echo "heroku-api-key is required"; exit 1; }
-        [[ "${{ inputs.remove-git-folder }}" != "true" && "${{ inputs.remove-git-folder }}" != "false" ]] && { echo "invalid value for remove-git-folder input. Expected 'true' or 'false'"; exit 1; }
+        [[ "$IN_HEROKU-API-KEY" ]] || { echo "heroku-api-key is required"; exit 1; }
+        [[ "$IN_HEROKU-API-KEY" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "heroku-api-key contains invalid characters"; exit 1; }
+        [[ "$IN_REMOVE-GIT-FOLDER" != "true" && "$IN_REMOVE-GIT-FOLDER" != "false" ]] && { echo "invalid value for remove-git-folder input. Expected 'true' or 'false'"; exit 1; }
         echo "All inputs are valid"
 
     - name: Validate push inputs
       if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
+      env:
+        IN_HEROKU-APP-NAME: ${{ inputs.heroku-app-name }}
       run: |
         echo "Validating push inputs ..."
-        [[ "${{ inputs.heroku-app-name }}" ]] || { echo "heroku-app-name is required"; exit 1; }
+        [[ "$IN_HEROKU-APP-NAME" ]] || { echo "heroku-app-name is required"; exit 1; }
+        [[ "$IN_HEROKU-APP-NAME" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "heroku-app-name contains invalid characters"; exit 1; }
         echo "All inputs are valid"
 
     # When a PR is closed only the heroku-pipeline-id is required, but both review-app-creation-check-timeout and review-app-creation-check-sleep-time have default values then it won't harm even if not used
     - name: Validate pull_request inputs
       if: ${{ github.event_name == 'pull_request' }}
       shell: bash
+      env:
+        IN_HEROKU-PIPELINE-ID: ${{ inputs.heroku-pipeline-id }}
+        IN_REVIEW-APP-CREATION-CHECK-TIMEOUT: ${{ inputs.review-app-creation-check-timeout }}
+        IN_REVIEW-APP-CREATION-CHECK-SLEEP-TIME: ${{ inputs.review-app-creation-check-sleep-time }}
+        GHEV_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
         echo "Validating pull_request inputs ..."
-        [[ "${{ inputs.heroku-pipeline-id }}" ]] || { echo "heroku-pipeline-id is required"; exit 1; }
-        [[ "${{ inputs.review-app-creation-check-timeout }}" =~ ^[0-9]+$ ]] || { echo "review-app-creation-check-timeout must be a number"; exit 1; }
-        [[ "${{ inputs.review-app-creation-check-sleep-time }}" =~ ^[0-9]+$ && "${{ inputs.review-app-creation-check-sleep-time }}" -ge 5 ]] || { echo "review-app-creation-check-sleep-time must be a number >= 5"; exit 1; }
+        [[ "$IN_HEROKU-PIPELINE-ID" ]] || { echo "heroku-pipeline-id is required"; exit 1; }
+        [[ "$IN_HEROKU-PIPELINE-ID" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo "heroku-pipeline-id contains invalid characters"; exit 1; }
+        [[ "$IN_REVIEW-APP-CREATION-CHECK-TIMEOUT" =~ ^[0-9]+$ ]] || { echo "review-app-creation-check-timeout must be a number"; exit 1; }
+        [[ "$IN_REVIEW-APP-CREATION-CHECK-SLEEP-TIME" =~ ^[0-9]+$ && "$IN_REVIEW-APP-CREATION-CHECK-SLEEP-TIME" -ge 5 ]] || { echo "review-app-creation-check-sleep-time must be a number >= 5"; exit 1; }
+
+        [[ "$GHEV_PR_HEAD_REF" =~ ^[a-zA-Z0-9_-/]+$ ]] || { echo "Pull Request name contains invalid characters"; exit 1; }
         echo "All inputs are valid"
 
     # this action must be preceeded by the actions/checkout to retrieve the source code
@@ -80,12 +97,14 @@ runs:
     - name: Create Source Endpoint
       if: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.action != 'closed') || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' }}
       shell: bash
+      env:
+        IN_HEROKU-API-KEY: ${{ inputs.heroku-api-key }}
       run: |
         echo "Creating a source endpoint ..."
         SOURCE_ENDPOINT_JSON=$(curl --fail-with-body -X POST https://api.heroku.com/sources \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
+        -H "Authorization: Bearer $IN_HEROKU-API-KEY" | \
         jq -ec '{get: .source_blob.get_url, put: .source_blob.put_url}')
 
         echo "::add-mask::$SOURCE_ENDPOINT_JSON"
@@ -114,16 +133,18 @@ runs:
       if: ${{ github.event_name == 'pull_request' && (github.event.action == 'synchronize') }}
       shell: bash
       env:
-        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        IN_HEROKU-API-KEY: ${{ inputs.heroku-api-key }}
+        IN_HEROKU-PIPELINE-ID: ${{ inputs.heroku-pipeline-id }}
+        GHEV_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
         echo "Sync Review App"
 
-        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
+        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/$IN_HEROKU-PIPELINE-ID/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
+        -H "Authorization: Bearer $IN_HEROKU-API-KEY")
 
-        REVIEWAPP_APP_ID=$(echo "$RESPONSE" | jq -r --arg pr_head_ref_arg "$PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .app.id) | .[]')
+        REVIEWAPP_APP_ID=$(echo "$RESPONSE" | jq -r --arg pr_head_ref_arg "$GHEV_PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .app.id) | .[]')
 
         if [ -n "$REVIEWAPP_APP_ID" ]; then
           echo "Creating a new build for an existing Review App $REVIEWAPP_APP_ID ..."
@@ -141,10 +162,12 @@ runs:
     - name: Create App Build
       if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.action == 'synchronize') }}
       shell: bash
+      env:
+        IN_HEROKU-APP-NAME: ${{ inputs.heroku-app-name }}
       run: |
         echo "Create App Build"
 
-        APP_ID="${{ inputs.heroku-app-name }}"
+        APP_ID="$IN_HEROKU-APP-NAME"
 
         if [ ${{ github.event_name }} == 'pull_request' ] && [ ${{ github.event.action }} == 'synchronize' ]; then
           if [ "${{ env.CREATE_APP_BUILD_ON_SYNCHRONIZE }}" == "true" ]; then
@@ -167,7 +190,7 @@ runs:
         -d "$DATA" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
+        -H "Authorization: Bearer $IN_HEROKU-API-KEY")
 
         NEW_BUILD_ID=$(echo "$NEW_BUILD_OUTPUT" | jq -er '.id')
         OUTPUT_STREAM_URL=$(echo "$NEW_BUILD_OUTPUT" | jq -er '.output_stream_url')
@@ -180,7 +203,7 @@ runs:
           NEW_BUILD_STATUS=$(curl --retry 5 --silent -S --fail-with-body "https://api.heroku.com/apps/$APP_ID/builds/$NEW_BUILD_ID" \
           -H "Accept: application/vnd.heroku+json; version=3" \
           -H "Content-Type: application/json" \
-          -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
+          -H "Authorization: Bearer $IN_HEROKU-API-KEY" | \
           jq -er '.status')
 
           if [ "$NEW_BUILD_STATUS" == "pending" ]; then
@@ -202,19 +225,20 @@ runs:
       if: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize') }}
       shell: bash
       env:
-        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        IN_HEROKU-PIPELINE-ID: ${{ inputs.heroku-pipeline-id }}
+        GHEV_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
         echo "Create Review App"
 
         [[ ${{ github.event.action }} == 'synchronize' && "${{ env.CREATE_REVIEWAPP_ON_SYNCHRONIZE }}" != "true" ]] && { echo "Skipping Review App creation on synchronize" ; exit 0; }
 
-        DATA=$(jq -n --arg pr_head_ref_arg "$PR_HEAD_REF" --arg gh_sha_arg "${GITHUB_SHA::7}" \
+        DATA=$(jq -n --arg pr_head_ref_arg "$GHEV_PR_HEAD_REF" --arg gh_sha_arg "${GITHUB_SHA::7}" \
         '{
             "source_blob": {
               "url": "${{ env.SOURCE_ENDPOINT_GET }}",
               "version": $gh_sha_arg
             },
-            "pipeline": "${{ inputs.heroku-pipeline-id }}",
+            "pipeline": "$IN_HEROKU-PIPELINE-ID",
             "pr_number": ${{ github.event.pull_request.number }},
             "branch": $pr_head_ref_arg
         }')
@@ -223,7 +247,7 @@ runs:
         -d "$DATA" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
+        -H "Authorization: Bearer $IN_HEROKU-API-KEY" | \
         jq -er '.id')
 
         echo "Waiting for Review App creation $REVIEW_APP_ID ..."
@@ -241,7 +265,7 @@ runs:
             REVIEW_APP_STATUS=$(curl --retry 5 --fail-with-body "https://api.heroku.com/review-apps/$REVIEW_APP_ID" \
             -H "Accept: application/vnd.heroku+json; version=3" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ inputs.heroku-api-key }}" | \
+            -H "Authorization: Bearer $IN_HEROKU-API-KEY" | \
             jq -er '.status')
 
             [[ "$REVIEW_APP_STATUS" == "created" ]] && { echo "Review App created successfully" ; exit 0; } || \
@@ -266,21 +290,23 @@ runs:
       if: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' }}
       shell: bash
       env:
-        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        IN_HEROKU-API-KEY: ${{ inputs.heroku-api-key }}
+        IN_HEROKU-PIPELINE-ID: ${{ inputs.heroku-pipeline-id }}
+        GHEV_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
-        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/${{ inputs.heroku-pipeline-id }}/review-apps" \
+        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/$IN_HEROKU-PIPELINE-ID/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
-        -H "Authorization: Bearer ${{ inputs.heroku-api-key }}")
+        -H "Authorization: Bearer $IN_HEROKU-API-KEY")
 
-        REVIEWAPP_ID_TOBEDELETED=$(echo "$RESPONSE" | jq -r --arg pr_head_ref_arg "$PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .id) | .[]')
+        REVIEWAPP_ID_TOBEDELETED=$(echo "$RESPONSE" | jq -r --arg pr_head_ref_arg "$GHEV_PR_HEAD_REF" 'map(select((.pr_number == ${{ github.event.pull_request.number }}) and (.branch == $pr_head_ref_arg)) | .id) | .[]')
 
         if [ -n "$REVIEWAPP_ID_TOBEDELETED" ]; then
           echo "Deleting Review App $REVIEWAPP_ID_TOBEDELETED ..."
           curl --fail-with-body -X DELETE "https://api.heroku.com/review-apps/$REVIEWAPP_ID_TOBEDELETED" \
           -H "Content-Type: application/json" \
           -H "Accept: application/vnd.heroku+json; version=3" \
-          -H "Authorization: Bearer ${{ inputs.heroku-api-key }}"
+          -H "Authorization: Bearer $IN_HEROKU-API-KEY"
         else
           echo "No Review App found to delete"
         fi
