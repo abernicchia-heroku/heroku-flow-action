@@ -101,7 +101,7 @@ runs:
         IN_HEROKU_API_KEY: ${{ inputs.heroku-api-key }}
       run: |
         echo "Creating a source endpoint ..."
-        SOURCE_ENDPOINT_JSON=$(curl --fail-with-body -X POST https://api.heroku.com/sources \
+        SOURCE_ENDPOINT_JSON=$(curl --retry 5 --fail-with-body -X POST https://api.heroku.com/sources \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer $IN_HEROKU_API_KEY" | \
@@ -122,7 +122,7 @@ runs:
       shell: bash
       run: |
         echo "Uploading Source Code ..."
-        curl --fail-with-body "${{ env.SOURCE_ENDPOINT_PUT }}" -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
+        curl --retry 5 --fail-with-body "${{ env.SOURCE_ENDPOINT_PUT }}" -X PUT -H 'Content-Type:' --data-binary @/tmp/source.tar.gz
         echo "SOURCE_CODE_UPLOADED=true" >> $GITHUB_ENV
 
     # Whenever a PR branch is updated, the related Review App is looked for and the latest commit is deployed to it. This avoids to create a new Review App (RA) and fail due to an existing RA with the same pr_number/branch
@@ -139,7 +139,7 @@ runs:
       run: |
         echo "Sync Review App"
 
-        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/$IN_HEROKU_PIPELINE_ID/review-apps" \
+        RESPONSE=$(curl --retry 5 --fail-with-body "https://api.heroku.com/pipelines/$IN_HEROKU_PIPELINE_ID/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer $IN_HEROKU_API_KEY")
@@ -187,7 +187,7 @@ runs:
             }
         }')
 
-        NEW_BUILD_OUTPUT=$(curl --fail-with-body -X POST "https://api.heroku.com/apps/$APP_ID/builds" \
+        NEW_BUILD_OUTPUT=$(curl --retry 5 --fail-with-body -X POST "https://api.heroku.com/apps/$APP_ID/builds" \
         -d "$DATA" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
@@ -197,7 +197,7 @@ runs:
         OUTPUT_STREAM_URL=$(echo "$NEW_BUILD_OUTPUT" | jq -er '.output_stream_url')
 
         echo "Getting build output..."
-        curl --silent -S --fail-with-body "$OUTPUT_STREAM_URL"
+        curl --retry 5 --silent -S --fail-with-body "$OUTPUT_STREAM_URL"
 
         for i in {1..5}
         do
@@ -245,7 +245,7 @@ runs:
             "branch": $pr_head_ref_arg
         }')
 
-        REVIEW_APP_ID=$(curl --fail-with-body -X POST https://api.heroku.com/review-apps \
+        REVIEW_APP_ID=$(curl --retry 5 --fail-with-body -X POST https://api.heroku.com/review-apps \
         -d "$DATA" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Content-Type: application/json" \
@@ -284,7 +284,7 @@ runs:
       shell: bash
       run: |
         echo "Tarball cleanup"          
-        curl --fail-with-body "${{ env.SOURCE_ENDPOINT_PUT }}" -X PUT -H 'Content-Type:' --data-binary ""
+        curl --retry 5 --fail-with-body "${{ env.SOURCE_ENDPOINT_PUT }}" -X PUT -H 'Content-Type:' --data-binary ""
     
     # In such case, it’s safe to use “jq -r” (instead of “jq -re”) to avoid exiting with an error when no Review App is found with a specific pr_number/branch (e.g. due to manual/automated removal of the app). In this case the REVIEWAPP_ID_TOBEDELETED (.id) is empty
     # to avoid untrusted input from github.event.pull_request.head.ref its value is copied to an env var before being used - see https://securitylab.github.com/resources/github-actions-untrusted-input/
@@ -296,7 +296,7 @@ runs:
         IN_HEROKU_PIPELINE_ID: ${{ inputs.heroku-pipeline-id }}
         GHEV_PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       run: |
-        RESPONSE=$(curl --fail-with-body "https://api.heroku.com/pipelines/$IN_HEROKU_PIPELINE_ID/review-apps" \
+        RESPONSE=$(curl --retry 5 --fail-with-body "https://api.heroku.com/pipelines/$IN_HEROKU_PIPELINE_ID/review-apps" \
         -H "Content-Type: application/json" \
         -H "Accept: application/vnd.heroku+json; version=3" \
         -H "Authorization: Bearer $IN_HEROKU_API_KEY")
@@ -305,7 +305,7 @@ runs:
 
         if [ -n "$REVIEWAPP_ID_TOBEDELETED" ]; then
           echo "Deleting Review App $REVIEWAPP_ID_TOBEDELETED ..."
-          curl --fail-with-body -X DELETE "https://api.heroku.com/review-apps/$REVIEWAPP_ID_TOBEDELETED" \
+          curl --retry 5 --fail-with-body -X DELETE "https://api.heroku.com/review-apps/$REVIEWAPP_ID_TOBEDELETED" \
           -H "Content-Type: application/json" \
           -H "Accept: application/vnd.heroku+json; version=3" \
           -H "Authorization: Bearer $IN_HEROKU_API_KEY"
