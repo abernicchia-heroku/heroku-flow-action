@@ -308,7 +308,7 @@ runs:
 
         if [ -n "$REVIEWAPP_ID_TOBEDELETED" ]; then
           echo "Deleting Review App $REVIEWAPP_ID_TOBEDELETED ..."
-          curl --retry 5 --fail-with-body -X DELETE "https://api.heroku.com/review-apps/$REVIEWAPP_ID_TOBEDELETED" \
+          curl --retry 5 --fail-with-body -o /dev/null -X DELETE "https://api.heroku.com/review-apps/$REVIEWAPP_ID_TOBEDELETED" \
           -H "Content-Type: application/json" \
           -H "Accept: application/vnd.heroku+json; version=3" \
           -H "Authorization: Bearer $IN_HEROKU_API_KEY"
