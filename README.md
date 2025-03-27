@@ -1,6 +1,3 @@
-> [!WARNING]
-> This repository is a work in progress and is not intended for external use at this time. Please follow the repository for future updates.
-
 # Heroku Flow Action
 GitHub Action to upload the source code to Heroku from a private GitHub repository using the [Heroku Source Endpoint API](https://devcenter.heroku.com/articles/build-and-release-using-the-api#sources-endpoint). It mimics and extends the [Heroku GitHub integration](https://devcenter.heroku.com/articles/github-integration). The uploaded code is built to either deploy an app (on `push`, `workflow_dispatch` and `schedule` events) or create/update a review app (on `pull_request` events such as `opened`, `reopened`, `synchronize`). Whenever a PR branch is updated, the latest commit is deployed to the review app if existing, otherwise a new review app is created. 
 The Review App is automatically removed when the pull request is closed (on `pull_request` events when the action is `closed`).
